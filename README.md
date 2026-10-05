@@ -1,72 +1,97 @@
 # bookmark-tags
 
-Chrome 书签管理插件 — 支持标签分组、喜爱度评分、站点内容提取与 Google 云端同步。
+[简体中文](README-cn.md) | **English**
 
-## 安装
+A Chrome bookmark manager with tag groups, favorites, site content extraction and Google Drive sync.
 
-1. 打开 Chrome，访问 `chrome://extensions/`
-2. 开启「开发者模式」
-3. 点击「加载已解压的扩展程序」，选择本项目根目录
+[**➜ Install from the Chrome Web Store**](https://chromewebstore.google.com/detail/bookmark-tags/pljamlkjekmanbdoabecjpbiickpohkj)
 
-## 功能
+## Screenshots
 
-### Popup 弹窗
-- **已收藏页面**：图标高亮（紫色），显示已打标签和喜爱度，点击标签查看关联书签
-- **未收藏页面**：图标灰色，显示最近使用/推荐标签，快速收藏
-- **站点脚本自动填充**：未收藏页面自动提取 title/preview/previewVideo，建议 tag（点击后创建）
-- **标题可编辑**：收藏和未收藏状态的标题都可以直接修改
-- **搜索**：支持标题+标签关键词搜索（含 alias 和标记 tags），标签多选（OR），喜爱度筛选（>=），三者 AND 逻辑
-- **分组标签**：每个分组（含未分组）底部可添加新标签，点击标签直接添加/移除
-- **Tag Picker**：在添加标签输入框 focus 时弹出完整分组标签选择器，搜索+点击
+| Bookmarks | Popup |
+|---|---|
+| ![Bookmarks](screenshots/options-bookmarks.png) | ![Popup](screenshots/popup.png) |
 
-### Options 管理页
-1. **收藏管理**：全宽布局，支持列表/平铺模式切换，preview 默认显示，hover 播放视频，卡片大小可调
-2. **标签管理**：未分组始终显示；别名和标记 Tags 在搜索中生效；标记 Tags 用 tag picker 选择
-3. **站点配置**：URL 正则匹配 + 自定义脚本（可读写 title/labels/tags/preview/previewVideo），内置 Debug 测试
-4. **配置**：主题与语言偏好；数据导出/导入/清除；Chrome 同步 + Google Drive 版本化同步
-5. **使用说明**：内置 Guide 页面，覆盖标签管理、站点配置、预览视频、数据同步
+**Tag Manager**
 
-### 主题
-- popup 与 options 共用同一套配色，支持 **跟随系统（默认）/ 浅色 / 深色**，在 Options → Settings → Theme 中切换
-- 跟随系统时不写 `data-theme` 属性，由 CSS `light-dark()` + `color-scheme` 原生响应系统外观变化，**无需刷新页面**
-- 主题偏好存于 `bt_config.theme`，随 Chrome 同步 / Google Drive 一起同步
-- 首屏由 `theme.js` 从 `localStorage` 缓存同步应用，避免加载瞬间闪烁
+![Tag Manager](screenshots/options-tags.png)
 
-> ⚠️ 需要 Chrome 123+（`light-dark()` 支持）。另外注意：popup 此前固定为深色，改为跟随系统后，系统为浅色时 popup 会显示为浅色。
+## Install
 
-## 快速上手
+**Option 1 — Chrome Web Store (recommended)**
 
-1. 安装后在任意页面点击扩展图标，看到推荐标签点击即可收藏
-2. 进入 Options → Tag Manager，创建分组和标签来组织书签
-3. 进入 Options → Site Config，配置常用网站的自动提取脚本
-4. 详见 Options → 📖 Guide
+Open the [Chrome Web Store listing](https://chromewebstore.google.com/detail/bookmark-tags/pljamlkjekmanbdoabecjpbiickpohkj) and click *Add to Chrome*.
 
-## 数据模型
+**Option 2 — Load from source**
 
-| 模型 | 字段 |
-|------|------|
+1. Open Chrome and go to `chrome://extensions/`
+2. Enable **Developer mode**
+3. Click **Load unpacked** and select the project root
+
+## Features
+
+### Popup
+
+- **Already bookmarked** — the toolbar icon is highlighted (purple) and shows the page's tags and rating; click a tag to see related bookmarks
+- **Not bookmarked** — the icon is grey; shows recently used and suggested tags for one-click saving
+- **Site script autofill** — on an unbookmarked page, extracts title / preview / previewVideo and suggests tags (click to create them)
+- **Editable title** — the title can be edited whether or not the page is already bookmarked
+- **Search** — search by title and tag keywords (including aliases and linked tags), multi-select tags (OR), filter by rating (>=), combined with AND
+- **Grouped tags** — every group (including Ungrouped) has an input at the bottom for new tags; click a tag to add or remove it
+- **Tag picker** — focusing a tag input opens the full grouped tag picker with search
+
+### Options
+
+1. **Bookmarks** — full-width layout, list/tile view toggle, previews shown by default, hover to play video, adjustable card size
+2. **Tag Manager** — Ungrouped always visible; aliases and linked tags participate in search; linked tags chosen via the tag picker
+3. **Site Config** — URL regex matching plus a custom script (can read/write title, labels, tags, preview, previewVideo), with a built-in debug tester
+4. **Settings** — theme and language preferences; data export/import/clear; Chrome Sync and versioned Google Drive sync
+5. **Guide** — a built-in guide covering tag management, site config, preview videos and data sync
+
+### Theme
+
+- The popup and options page share one palette and support **Follow System (default) / Light / Dark**, switchable in Options → Settings → Theme
+- In Follow System mode no `data-theme` attribute is written — CSS `light-dark()` plus `color-scheme` respond to OS appearance changes natively, with **no page reload**
+- The preference is stored in `bt_config.theme` and syncs with Chrome Sync / Google Drive
+- `theme.js` applies the cached value from `localStorage` synchronously on load, so the first paint is already correct (no flash)
+
+> ⚠️ Requires Chrome 123+ (for `light-dark()`). Note also that the popup used to be permanently dark — now that it follows the system, it renders light when your OS is in light mode.
+
+## Quick start
+
+1. Click the extension icon on any page and click a suggested tag to bookmark it
+2. Go to Options → Tag Manager to create groups and tags
+3. Go to Options → Site Config to set up extraction scripts for the sites you use
+4. See Options → 📖 Guide for the full walkthrough
+
+## Data model
+
+| Model | Fields |
+|------|--------|
 | Bookmark | id, url, title, tags[], favorite(0-5), labels[], contentTags[], preview, previewVideo, createdAt, updatedAt |
 | TagGroup | id, name, order |
-| Tag | id, name, alias[], tags[](其他tagId), groupId, order |
+| Tag | id, name, alias[], tags[] (other tagIds), groupId, order |
 | SiteConfig | id, urlPattern, script, updatedAt |
 | Config | syncEnabled, lastSyncAt, gdAutoSync, gdBaseVersion, gdDeviceId, gdDirty, locale, theme |
 
-## 搜索逻辑
+## Search logic
 
-- **alias**：搜索 tag 的别名等同于搜索原名，popup 和 options 均生效
-- **标记 Tags**：搜索 tag1 时，如果 tag1 被标记了 tag2，搜索 tag1 也能命中打 tag2 的页面
-- 搜索 tagIds 会被展开（alias + 标记关联递归展开）
+- **Aliases** — searching a tag's alias is equivalent to searching its name; works in both the popup and options
+- **Linked tags** — if tag1 is linked to tag2, searching tag1 also matches pages tagged tag2
+- The searched tagIds are expanded (aliases plus linked tags, expanded recursively)
 
-## 站点脚本
+## Site scripts
 
-站点配置的 `script` 字段可直接读写以下预定义变量：
-- `title` — 页面标题
-- `labels` — 标签数组（字符串）
-- `tags` — 标签数组（字符串，未收藏时点击创建）
-- `preview` — 预览图 URL
-- `previewVideo` — 预览视频 URL
+The `script` field of a site config can read and write these predefined variables:
 
-示例：
+- `title` — page title
+- `labels` — array of label strings
+- `tags` — array of tag strings (click to create when not yet bookmarked)
+- `preview` — preview image URL
+- `previewVideo` — preview video URL
+
+Example:
+
 ```js
 // URL Pattern: youtube\.com/watch
 title = document.querySelector('yt-formatted-string.ytd-watch-metadata')?.textContent?.trim() || title;
@@ -74,7 +99,7 @@ preview = document.querySelector('link[rel="thumbnail"]')?.href || '';
 previewVideo = location.href;
 ```
 
-## 同步
+## Sync
 
-- **Chrome Sync**：通过 chrome.storage.sync 在设备间同步，上限约 100KB
-- **Google Drive**：版本化同步到 Google Drive appDataFolder，支持冲突检测和解决
+- **Chrome Sync** — syncs across devices via `chrome.storage.sync`, limit roughly 100KB
+- **Google Drive** — versioned sync to the Drive `appDataFolder`, with conflict detection and resolution
