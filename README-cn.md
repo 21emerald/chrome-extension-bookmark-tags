@@ -98,3 +98,7 @@ previewVideo = location.href;
 
 - **Chrome Sync**：通过 chrome.storage.sync 在设备间同步，上限约 100KB
 - **Google Drive**：版本化同步到 Google Drive appDataFolder，支持冲突检测和解决
+
+## 许可
+
+[MIT](LICENSE) © 2026 21emerald

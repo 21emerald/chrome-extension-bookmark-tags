@@ -103,3 +103,7 @@ previewVideo = location.href;
 
 - **Chrome Sync** — syncs across devices via `chrome.storage.sync`, limit roughly 100KB
 - **Google Drive** — versioned sync to the Drive `appDataFolder`, with conflict detection and resolution
+
+## License
+
+[MIT](LICENSE) © 2026 21emerald
