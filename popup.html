@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=400">
+  <title>bookmark-tags</title>
+  <!-- 必须在样式表之前：同步应用主题，避免首屏闪烁 -->
+  <script src="theme.js"></script>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div id="app">
+    <!-- 顶部：搜索栏 -->
+    <div class="search-bar">
+      <input type="text" id="searchInput" data-i18n-placeholder="popup.search_placeholder" autocomplete="off">
+      <button id="searchBtn" data-i18n-title="popup.tag_filter">🏷️</button>
+    </div>
+
+    <!-- 喜爱度筛选 -->
+    <div class="filter-row" id="filterRow">
+      <label data-i18n="popup.favorite_gte"></label>
+      <div class="star-filter" id="starFilter">
+        <span class="star" data-val="1">☆</span>
+        <span class="star" data-val="2">☆</span>
+        <span class="star" data-val="3">☆</span>
+        <span class="star" data-val="4">☆</span>
+        <span class="star" data-val="5">☆</span>
+      </div>
+      <button id="searchModeBtn" class="mode-btn" data-i18n-title="popup.toggle_sort" data-i18n="popup.sort_newest"></button>
+    </div>
+
+    <!-- 搜索结果区域 -->
+    <div id="searchResults" class="section" style="display:none;"></div>
+
+    <!-- 已收藏视图 -->
+    <div id="bookmarkedView" style="display:none;">
+      <div class="bookmark-header">
+        <input type="text" class="title-input" id="bmTitle" data-i18n-placeholder="popup.title_placeholder">
+        <input type="text" class="url-input" id="bmUrl" placeholder="https://..." readonly>
+      </div>
+      <div class="favorite-row">
+        <label data-i18n="popup.favorite"></label>
+        <div class="star-edit" id="starEdit">
+          <span class="star" data-val="1">☆</span>
+          <span class="star" data-val="2">☆</span>
+          <span class="star" data-val="3">☆</span>
+          <span class="star" data-val="4">☆</span>
+          <span class="star" data-val="5">☆</span>
+        </div>
+        <button id="removeBmBtn" class="btn-danger btn-sm" data-i18n-title="popup.unfavorite">✕</button>
+      </div>
+      <div id="bmPreviewArea" class="preview-area" style="display:none;"></div>
+      <div class="tag-list" id="bmTags"></div>
+      <div id="tagRelatedBms" class="section" style="display:none;"></div>
+    </div>
+
+    <!-- 未收藏视图 -->
+    <div id="notBookmarkedView" style="display:none;">
+      <div class="bookmark-header">
+        <input type="text" class="title-input" id="newBmTitle" data-i18n-placeholder="popup.title_placeholder">
+      </div>
+      <div class="favorite-row new-fav">
+        <label data-i18n="popup.favorite"></label>
+        <div class="star-edit" id="newStarEdit">
+          <span class="star" data-val="1">☆</span>
+          <span class="star" data-val="2">☆</span>
+          <span class="star" data-val="3">☆</span>
+          <span class="star" data-val="4">☆</span>
+          <span class="star" data-val="5">☆</span>
+        </div>
+      </div>
+      <div class="suggest-section">
+        <div class="suggest-label" data-i18n="popup.recent_suggest"></div>
+        <div class="tag-list" id="suggestTags"></div>
+      </div>
+      <div id="bmSuggestPreviewArea" class="preview-suggest-area" style="display:none;"></div>
+    </div>
+
+    <!-- 所有分组 tag（两视图共享，每个组 inline 添加输入） -->
+    <div id="groupedTags" class="section"></div>
+
+    <!-- Tag 下拉选择器（定位在触发 input 下方） -->
+    <div id="tagPicker" class="tag-picker-dropdown" style="display:none;">
+      <div id="tagPickerContent" class="tag-picker-content"></div>
+    </div>
+
+    <!-- 已选标签筛选展示 -->
+    <div id="tagSelector" class="section" style="display:none;">
+      <div class="tag-selector-header"><span data-i18n="popup.filter_tags"></span> <span class="tag-selector-clear" id="tagSelectorClear" data-i18n="popup.clear"></span></div>
+      <div id="tagSelectorList"></div>
+    </div>
+  </div>
+  <script src="locales.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

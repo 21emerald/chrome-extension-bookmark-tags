@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title data-i18n="options.title">bookmark-tags Options</title>
+  <!-- 必须在样式表之前：同步应用主题，避免首屏闪烁 -->
+  <script src="theme.js"></script>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div id="app">
+    <nav class="sidebar">
+      <h1 class="logo" data-i18n="options.logo">🔖 bookmark-tags</h1>
+      <ul class="nav-list">
+        <li class="nav-item active" data-tab="bookmarks" data-i18n="options.nav_bookmarks">📚 Bookmarks</li>
+        <li class="nav-item" data-tab="tags" data-i18n="options.nav_tags">🏷️ Tag Manager</li>
+        <li class="nav-item" data-tab="sites" data-i18n="options.nav_sites">🌐 Site Config</li>
+        <li class="nav-item" data-tab="config" data-i18n="options.nav_config">⚙️ Settings</li>
+        <li class="nav-item" data-tab="guide" data-i18n="options.nav_guide">📖 Guide</li>
+      </ul>
+    </nav>
+
+    <main class="content">
+      <!-- ====== 收藏模块 ====== -->
+      <section id="tab-bookmarks" class="tab-panel active">
+        <div class="panel-header">
+          <h2 data-i18n="options.bm_title">Bookmark Manager</h2>
+          <div class="search-bar">
+            <input type="text" id="bmSearchInput" data-i18n-placeholder="options.bm_search_placeholder" autocomplete="off">
+            <button id="bmTagPanelToggle" class="bm-tp-toggle" data-i18n-title="options.bm_tag_filter">🏷️</button>
+            <button id="bmLayoutToggle" class="bm-tp-toggle" title="Toggle layout">📋</button>
+            <div class="filter-group">
+              <label data-i18n="options.bm_favorite_gte"></label>
+              <div class="star-filter" id="bmStarFilter">
+                <span class="star" data-val="1">☆</span>
+                <span class="star" data-val="2">☆</span>
+                <span class="star" data-val="3">☆</span>
+                <span class="star" data-val="4">☆</span>
+                <span class="star" data-val="5">☆</span>
+              </div>
+              <select id="bmSortSelect">
+                <option value="newest" data-i18n="options.bm_sort_newest">Newest</option>
+                <option value="favorite" data-i18n="options.bm_sort_favorite">Top Fav</option>
+                <option value="tagAsc" data-i18n="options.bm_sort_tag_asc">Tag ↑</option>
+                <option value="tagDesc" data-i18n="options.bm_sort_tag_desc">Tag ↓</option>
+              </select>
+              <label class="autoplay-toggle" style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text-dim);cursor:pointer;">
+                <input type="checkbox" id="bmAutoplayVideos">
+                <span data-i18n="options.bm_autoplay_videos">Auto-play videos</span>
+              </label>
+            </div>
+          </div>
+          <div id="bmTileSizeControl" class="bm-tile-size-control" style="display:none;">
+            <label data-i18n="options.bm_tile_size">Tile Size</label>
+            <input type="range" id="bmTileSizeSlider" min="200" max="500" value="320" step="10">
+            <span id="bmTileSizeValue">320</span>
+            <label class="autoplay-toggle" style="display:flex;align-items:center;gap:4px;margin-left:12px;cursor:pointer;">
+              <input type="checkbox" id="bmPreviewOnly">
+              <span data-i18n="options.bm_preview_only">Preview Only</span>
+            </label>
+          </div>
+          <!-- 已选标签 chips -->
+          <div id="bmSelectedTags" class="bm-selected-tags"></div>
+          <!-- 标签筛选面板 -->
+          <div id="bmTagPanel" class="bm-tag-panel" style="display:none;"></div>
+        </div>
+        <div id="bookmarkList" class="bookmark-list"></div>
+        <div id="bmScrollSentinel"></div>
+      </section>
+
+      <!-- ====== 标签管理模块 ====== -->
+      <section id="tab-tags" class="tab-panel">
+        <div class="panel-header">
+          <h2 data-i18n="options.tag_title">Tag Manager</h2>
+          <div class="action-bar">
+            <input type="text" id="newGroupName" data-i18n-placeholder="options.tag_new_group_placeholder">
+            <button id="addGroupBtn" class="btn-primary" data-i18n="options.tag_add_group">Add Group</button>
+          </div>
+        </div>
+        <div id="tagManagerContent" class="tag-manager"></div>
+      </section>
+
+      <!-- ====== 站点配置模块 ====== -->
+      <section id="tab-sites" class="tab-panel">
+        <div class="panel-header">
+          <h2 data-i18n="options.site_title">Site Config</h2>
+          <button id="addSiteBtn" class="btn-primary" data-i18n="options.site_add">+ Add Site</button>
+        </div>
+        <div id="siteList" class="site-list"></div>
+      </section>
+
+      <!-- ====== 配置模块 ====== -->
+      <section id="tab-config" class="tab-panel">
+        <div class="panel-header">
+          <h2 data-i18n="options.config_title">Settings</h2>
+        </div>
+        <div class="config-section">
+          <h3 data-i18n="options.config_language">Language</h3>
+          <div class="config-form">
+            <div class="config-row">
+              <select id="localeSelect"></select>
+            </div>
+            <p class="sync-hint" data-i18n="options.config_language_hint"></p>
+          </div>
+        </div>
+        <div class="config-section">
+          <h3 data-i18n="options.config_theme">Theme</h3>
+          <div class="config-form">
+            <div class="config-row">
+              <select id="themeSelect"></select>
+            </div>
+            <p class="sync-hint" data-i18n="options.config_theme_hint"></p>
+          </div>
+        </div>
+        <div class="config-section">
+          <h3 data-i18n="options.config_data">Data Management</h3>
+          <p class="sync-hint" style="margin-bottom:8px;" data-i18n="options.config_backup_hint"></p>
+          <div class="config-row">
+            <button id="exportBtn" class="btn-secondary" data-i18n="options.config_export"></button>
+            <button id="importBtn" class="btn-secondary" data-i18n="options.config_import"></button>
+            <input type="file" id="importFile" accept=".json" style="display:none;">
+          </div>
+          <div class="config-row">
+            <button id="clearBtn" class="btn-danger" data-i18n="options.config_clear"></button>
+          </div>
+        </div>
+        <div class="config-section">
+          <h3 data-i18n="options.config_chrome_sync"></h3>
+          <div class="config-form">
+            <label class="sync-toggle">
+              <input type="checkbox" id="syncEnabled">
+              <span data-i18n="options.config_enable_chrome_sync"></span>
+            </label>
+            <p class="sync-hint" data-i18n="options.config_chrome_sync_hint"></p>
+            <div class="config-row" style="margin-top:8px;">
+              <button id="syncPullBtn" class="btn-secondary" data-i18n="options.config_pull_chrome"></button>
+              <span id="syncStatus" class="sync-status"></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="config-section">
+          <h3 data-i18n="options.config_gd_title"></h3>
+          <div class="config-form">
+            <p class="sync-hint" data-i18n="options.config_gd_hint"></p>
+            <label class="sync-toggle">
+              <input type="checkbox" id="gdAutoSync">
+              <span data-i18n="options.config_gd_auto"></span>
+            </label>
+            <p class="sync-hint" data-i18n="options.config_gd_auto_hint"></p>
+            <div class="config-row" style="margin-top:8px;">
+              <button id="gdAuthBtn" class="btn-secondary" data-i18n="options.config_gd_auth"></button>
+              <button id="gdPushBtn" class="btn-secondary" data-i18n="options.config_gd_push"></button>
+              <button id="gdPullBtn" class="btn-secondary" data-i18n="options.config_gd_pull"></button>
+            </div>
+            <div class="config-row" style="margin-top:4px;">
+              <span id="gdStatus" class="sync-status"></span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ====== 使用指南模块 ====== -->
+      <section id="tab-guide" class="tab-panel">
+        <div class="panel-header">
+          <h2 data-i18n="options.guide_title">📖 Usage Guide</h2>
+        </div>
+
+        <div class="guide-section">
+          <h3 data-i18n="options.guide_quick_start">Quick Start</h3>
+          <p data-i18n="options.guide_quick_start_desc">After installing the extension, click the extension icon on any page to open the popup. If the page is not bookmarked, you'll see the title, suggested tags, and a "Bookmark" button. Click a tag to bookmark the page with that tag.</p>
+        </div>
+
+        <div class="guide-section">
+          <h3 data-i18n="options.guide_tag_title">Tag Management</h3>
+          <p data-i18n="options.guide_tag_desc1">Tags are the core organizing tool. Each tag belongs to a group (or "Ungrouped" if none is specified).</p>
+          <ul>
+            <li data-i18n-html="options.guide_tag_li1"><strong>Create a group:</strong> Go to "Tag Manager" tab, type a group name in the input at the top, and click "Add Group". Groups can be drag-reordered.</li>
+            <li data-i18n-html="options.guide_tag_li2"><strong>Create a tag:</strong> Click "+" at the bottom of any group, type the tag name and press Enter. Tags can also be drag-reordered within their group.</li>
+            <li data-i18n-html="options.guide_tag_li3"><strong>Tag aliases:</strong> Click a tag to edit it. In the "Aliases" field, add alternative names. Searching an alias matches the same tag. Example: tag "JavaScript" with alias "JS" — searching "JS" finds all bookmarks tagged "JavaScript".</li>
+            <li data-i18n-html="options.guide_tag_li4"><strong>Marked Tags:</strong> In the tag edit panel, "Marked Tags" lets you associate one tag with others. When searching for tag A, bookmarks tagged with any of its marked tags will also appear. This creates a hierarchical relationship (e.g., "Frontend" marked with "React", "Vue" — searching "Frontend" also finds "React"/"Vue" bookmarks).</li>
+          </ul>
+          <div class="guide-note" data-i18n="options.guide_tag_note">Tip: You can add tags directly from the popup when bookmarking a page, or from the Options search page using the tag picker (🏷️ button).</div>
+        </div>
+
+        <div class="guide-section">
+          <h3 data-i18n="options.guide_site_title">Site Configuration</h3>
+          <p data-i18n="options.guide_site_desc1">Site configs let you write a custom script that runs automatically when you visit a matching page. The script can extract title, tags, preview image, and more.</p>
+          <ul>
+            <li data-i18n-html="options.guide_site_li1"><strong>URL Pattern:</strong> A regular expression. When the current page URL matches, the script runs. Example: <code>youtube\\.com/watch</code></li>
+            <li data-i18n-html="options.guide_site_li2"><strong>Script:</strong> JavaScript code that can read and modify these pre-defined variables: <code>title</code>, <code>labels</code>, <code>tags</code>, <code>preview</code>, <code>previewVideo</code>. Assign to them to set values.</li>
+          </ul>
+          <p data-i18n-html="options.guide_site_example_title"><strong>Example — YouTube:</strong></p>
+          <div class="guide-script-example">// URL Pattern: youtube\.com/watch
+// Extract video title and thumbnail
+title = document.querySelector('yt-formatted-string.ytd-watch-metadata')?.textContent?.trim() || title;
+preview = document.querySelector('link[rel="thumbnail"]')?.href || '';
+previewVideo = location.href;</div>
+          <p data-i18n-html="options.guide_site_example_title2"><strong>Example — GitHub repo:</strong></p>
+          <div class="guide-script-example">// URL Pattern: github\.com/[^/]+/[^/]+$
+// Extract repo name and topics
+title = document.querySelector('.js-repo-nav [itemprop="name"]')?.textContent?.trim() || title;
+const topicEls = document.querySelectorAll('.topic-tag');
+tags = Array.from(topicEls).map(el => el.textContent.trim());</div>
+          <div class="guide-note" data-i18n="options.guide_site_note">Note: Scripts run in the page's MAIN world context, so you can access the full DOM. For pages with strict CSP, script execution may fail. Use the "Debug" feature on the Site Config page to test.</div>
+        </div>
+
+        <div class="guide-section">
+          <h3 data-i18n="options.guide_preview_title">Preview & Video</h3>
+          <p data-i18n="options.guide_preview_desc1">Each bookmark can have a preview image (preview) and a preview video (previewVideo). These can be set by:</p>
+          <ul>
+            <li data-i18n="options.guide_preview_li1">Site config scripts (automatically extracted)</li>
+            <li data-i18n="options.guide_preview_li2">Manual edit in the popup or Options page</li>
+          </ul>
+          <p data-i18n="options.guide_preview_desc2">In the Options search page, previews are displayed as thumbnails. Hovering over a card with a previewVideo will play the video. Enable "Auto-play videos" to play all videos without hovering.</p>
+        </div>
+
+        <div class="guide-section">
+          <h3 data-i18n="options.guide_sync_title">Data Sync</h3>
+          <p data-i18n="options.guide_sync_desc1">Two sync methods are available:</p>
+          <ul>
+            <li data-i18n-html="options.guide_sync_li1"><strong>Chrome Sync:</strong> Uses your Chrome account to sync data across devices. Toggle on in Settings. Limited to ~100KB.</li>
+            <li data-i18n-html="options.guide_sync_li2"><strong>Google Drive:</strong> Backs up data to your Google Drive app data folder. Supports version tracking and conflict detection. More reliable for large datasets.</li>
+          </ul>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Tag Picker 弹层（全局共用） -->
+  <div id="tagPickerOverlay" class="tag-picker-overlay" style="display:none;">
+    <div class="tag-picker-modal">
+      <div class="tag-picker-header">
+        <input type="text" id="tagPickerSearch" data-i18n-placeholder="options.tag_picker_search" autocomplete="off">
+        <button class="btn-secondary btn-sm" id="tagPickerClose" data-i18n="options.tag_picker_close"></button>
+      </div>
+      <div id="tagPickerContent" class="tag-picker-content"></div>
+    </div>
+  </div>
+
+  <!-- 冲突解决弹层 -->
+  <div id="conflictOverlay" class="tag-picker-overlay" style="display:none;">
+    <div class="conflict-modal tag-picker-modal" style="max-width:700px;">
+      <div class="tag-picker-header">
+        <h3 data-i18n="options.conflict_title">Sync Conflicts</h3>
+        <button class="btn-secondary btn-sm" id="conflictClose" data-i18n="options.tag_picker_close">Close</button>
+      </div>
+      <p class="sync-hint" data-i18n="options.conflict_desc"></p>
+      <div id="conflictContent" class="conflict-content"></div>
+      <div style="text-align:right;margin-top:12px;">
+        <button class="btn-primary" id="conflictApplyBtn" data-i18n="options.conflict_apply">Apply</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="locales.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>
+
