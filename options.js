@@ -399,11 +399,24 @@ function getFilteredBookmarks() {
   return bms;
 }
 
+// ---- 条目数量统计 ----
+
+function updateBmCount() {
+  const el = $('#bmCount');
+  if (!el) return;
+  const kw = ($('#bmSearchInput')?.value || '').trim();
+  const hasFilter = !!kw || bmSelectedTagIds.length > 0 || bmSearchFav > 0;
+  el.textContent = hasFilter
+    ? t('options.bm_count_filtered', { n: bmFilteredBms.length, total: allBookmarks.length })
+    : t('options.bm_count_all', { n: allBookmarks.length });
+}
+
 // ---- 分页渲染 ----
 
 function filterAndRenderBookmarks() {
   bmFilteredBms = getFilteredBookmarks();
   bmRenderedCount = 0;
+  updateBmCount();
   const list = $('#bookmarkList');
   list.innerHTML = '';
 
@@ -668,6 +681,12 @@ function editBookmark(id) {
 
 // ================ 标签管理模块 ================
 
+// 分组的收起状态（键为 groupId，未分组用 '__nogroup__'）。
+// 仅存活于当前会话，不落库 —— 纯视图状态，刷新页面即恢复全部展开。
+// 必须存模块变量：renderTagManager() 每次都会重建整个 DOM，
+// 若只改 DOM，下一次重渲染（上移/拖拽/删除都会触发）就会把收起状态丢掉。
+let collapsedTagGroups = new Set();
+
 function renderTagManager() {
   const container = $('#tagManagerContent');
   container.innerHTML = '';
@@ -701,17 +720,26 @@ function renderTagManager() {
   // 渲染分组（包括空的未分组）
   const renderGroup = (groupId, groupName, tags, isNoGroup = false) => {
     const block = document.createElement('div');
-    block.className = 'tag-group-block';
+    const isCollapsed = collapsedTagGroups.has(groupId);
+    block.className = 'tag-group-block' + (isCollapsed ? ' collapsed' : '');
     if (!isNoGroup) {
-      block.draggable = true;
+      // 注意：拖拽能力挂在 ⠿ 手柄上（见下方 header），而非整张卡片，
+      // 否则选中分组名文字时会被误判为拖拽。
       block.dataset.gid = groupId;
     }
 
     const header = document.createElement('div');
     header.className = 'tag-group-header';
+    // 布局：左侧只留拖拽手柄 ⠿，分组名居中撑开，其余操作（↑↓ 收起/展开 删除组）
+    // 全部靠右。h3 的 flex:1 把它们推到右侧，各控件自带 flex-shrink:0。
     header.innerHTML = `
-      ${!isNoGroup ? `<span class="tag-group-drag-handle" title="${t('options.tag_drag_sort')}">⠿</span>` : ''}
+      ${!isNoGroup ? `<span class="tag-group-drag-handle" draggable="true" title="${t('options.tag_drag_sort')}">⠿</span>` : ''}
       <h3 contenteditable="true" class="group-name-edit" data-gid="${groupId}">${escHtml(groupName)}</h3>
+      ${!isNoGroup ? `<span class="tag-group-order-btns">
+        <button type="button" class="tag-group-move" data-dir="up" data-gid="${groupId}" title="${t('options.tag_move_up')}">↑</button>
+        <button type="button" class="tag-group-move" data-dir="down" data-gid="${groupId}" title="${t('options.tag_move_down')}">↓</button>
+      </span>` : ''}
+      <button type="button" class="tag-group-toggle" data-gid="${groupId}" title="${isCollapsed ? t('options.tag_expand') : t('options.tag_collapse')}">${isCollapsed ? '▸' : '▾'}</button>
       ${!isNoGroup ? `<button class="btn-danger btn-sm del-group" data-gid="${groupId}">${t('options.tag_delete_group')}</button>` : ''}
     `;
     block.appendChild(header);
@@ -719,7 +747,11 @@ function renderTagManager() {
     if (tags.length > 0) {
       const table = document.createElement('table');
       table.className = 'tag-table';
-      table.innerHTML = `<thead><tr><th>${t('options.tag_col_name')}</th><th>${t('options.tag_col_group')}</th><th>${t('options.tag_col_alias')}</th><th>${t('options.tag_col_marked_tags')}</th><th>${t('options.tag_col_actions')}</th></tr></thead><tbody></tbody>`;
+      // 固定列宽：每个分组各是一张独立表格，auto 布局会按各自内容算列宽，
+      // 于是各卡片列宽互不相同、表头无法纵向对齐。这里给所有表格同一套百分比列宽。
+      table.innerHTML = `<colgroup>
+          <col style="width:22%"><col style="width:14%"><col style="width:24%"><col style="width:28%"><col style="width:12%">
+        </colgroup><thead><tr><th>${t('options.tag_col_name')}</th><th>${t('options.tag_col_group')}</th><th>${t('options.tag_col_alias')}</th><th>${t('options.tag_col_marked_tags')}</th><th>${t('options.tag_col_actions')}</th></tr></thead><tbody></tbody>`;
       const tbody = table.querySelector('tbody');
 
       tags.sort((a, b) => a.order - b.order).forEach(tag => {
@@ -808,7 +840,48 @@ function renderTagManager() {
   // 未分组始终显示
   renderGroup('__nogroup__', t('options.tag_no_group'), groupMap['__nogroup__'] || [], true);
 
+  // 首个分组的 ↑ 与末个分组的 ↓ 置灰（DOM 顺序即 sortedGroups 顺序）
+  const orderBlocks = [...container.querySelectorAll('.tag-group-block[data-gid]')];
+  orderBlocks.forEach((b, i) => {
+    const up = b.querySelector('.tag-group-move[data-dir="up"]');
+    const down = b.querySelector('.tag-group-move[data-dir="down"]');
+    if (up && i === 0) up.disabled = true;
+    if (down && i === orderBlocks.length - 1) down.disabled = true;
+  });
+
   bindTagManagerEvents();
+  updateTagCollapseAllBtn();
+}
+
+// 所有可收起单元的 id（含未分组）——「全部收起 / 展开」以此为全集
+function allTagGroupIds() {
+  return [...allTagGroups.map(g => g.id), '__nogroup__'];
+}
+
+// 全局按钮的文案依赖折叠状态，而它位于 #tagManagerContent 之外、
+// 不会随重渲染刷新，所以要由 renderTagManager() 与单卡片切换各调一次。
+function updateTagCollapseAllBtn() {
+  const btn = $('#toggleAllGroupsBtn');
+  if (!btn) return;
+  const ids = allTagGroupIds();
+  const allCollapsed = ids.length > 0 && ids.every(id => collapsedTagGroups.has(id));
+  btn.textContent = allCollapsed ? t('options.tag_expand_all') : t('options.tag_collapse_all');
+}
+
+// 分组上/下移一位（与拖拽排序共用同一套 order 重排 + 持久化逻辑）
+async function moveTagGroup(gid, dir) {
+  const sorted = [...allTagGroups].sort((a, b) => a.order - b.order);
+  const idx = sorted.findIndex(g => g.id === gid);
+  if (idx === -1) return;
+  const target = dir === 'up' ? idx - 1 : idx + 1;
+  if (target < 0 || target >= sorted.length) return;
+
+  [sorted[idx], sorted[target]] = [sorted[target], sorted[idx]];
+  for (let i = 0; i < sorted.length; i++) sorted[i].order = i;
+
+  await send('saveTagGroups', { groups: sorted });
+  await loadAll();
+  renderTagManager();
 }
 
 function bindTagManagerEvents() {
@@ -975,15 +1048,37 @@ function bindTagManagerEvents() {
     renderTagManager();
   });
 
-  // 分组拖拽排序
+  // 分组上/下移
+  $$('.tag-group-move').forEach(btn => {
+    btn.addEventListener('click', () => moveTagGroup(btn.dataset.gid, btn.dataset.dir));
+  });
+
+  // 分组收起 / 展开（只切 class，不整表重渲染，以保留滚动位置）
+  $$('.tag-group-toggle').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const gid = btn.dataset.gid;
+      const nowCollapsed = !collapsedTagGroups.has(gid);
+      if (nowCollapsed) collapsedTagGroups.add(gid);
+      else collapsedTagGroups.delete(gid);
+
+      btn.closest('.tag-group-block').classList.toggle('collapsed', nowCollapsed);
+      btn.textContent = nowCollapsed ? '▸' : '▾';
+      btn.title = nowCollapsed ? t('options.tag_expand') : t('options.tag_collapse');
+      updateTagCollapseAllBtn();
+    });
+  });
+
+  // 分组拖拽排序（拖拽能力在 ⠿ 手柄上，事件冒泡到卡片）
   let dragSrcGroup = null;
-  const groupBlocks = $$('.tag-group-block[draggable="true"]');
+  const groupBlocks = $$('.tag-group-block[data-gid]');
   groupBlocks.forEach(block => {
     block.addEventListener('dragstart', (e) => {
       dragSrcGroup = block;
       block.classList.add('dragging');
       e.dataTransfer.effectAllowed = 'move';
       e.dataTransfer.setData('text/plain', block.dataset.gid);
+      // 幽灵图用整张卡片，否则默认只会拖出 ⠿ 这个小图标
+      e.dataTransfer.setDragImage(block, 20, 20);
     });
     block.addEventListener('dragend', () => {
       block.classList.remove('dragging');
@@ -1269,6 +1364,18 @@ async function loadConfig() {
 // ================ 全局事件 ================
 
 function bindGlobalEvents() {
+  // 全部收起 / 全部展开
+  // 注意：这里只绑一次（bindGlobalEvents 由 init() 调一次）。不要挪进
+  // bindTagManagerEvents() —— 那个函数每次 renderTagManager() 都会执行，
+  // 而本按钮在 #tagManagerContent 之外、不会被重建，监听器会不断累积。
+  $('#toggleAllGroupsBtn').addEventListener('click', () => {
+    const ids = allTagGroupIds();
+    const allCollapsed = ids.length > 0 && ids.every(id => collapsedTagGroups.has(id));
+    if (allCollapsed) collapsedTagGroups.clear();
+    else ids.forEach(id => collapsedTagGroups.add(id));
+    renderTagManager(); // 统一重建，保证 class 与按钮文案一致
+  });
+
   // 语言切换
   $('#localeSelect').addEventListener('change', async () => {
     const locale = $('#localeSelect').value;

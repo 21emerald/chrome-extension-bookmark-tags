@@ -27,6 +27,12 @@
 :root[data-theme="light"] { color-scheme: light; }
 :root[data-theme="dark"]  { color-scheme: dark; }
 
+/* 恒定预留纵向滚动条槽位。
+   展开/收起分组会改变页面高度，滚动条随之出现或消失，视口宽度会在十几 px
+   之间跳变，于是靠右的那排按钮整体左右位移 —— ▾ 恰好会滑到「删除组」底下，
+   想收起却点到删除。预留槽位后宽度恒定，位移消失。 */
+html { scrollbar-gutter: stable; }
+
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 body {
@@ -102,6 +108,13 @@ body {
 }
 .bm-tp-toggle:hover { border-color: var(--accent); }
 .bm-tp-toggle.active { background: var(--accent); border-color: var(--accent); }
+
+/* 条目数量统计 */
+.bm-count {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-top: 8px;
+}
 
 /* 已选标签 chips */
 .bm-selected-tags {
@@ -316,6 +329,31 @@ body {
   line-height: 1;
 }
 .tag-group-drag-handle:active { cursor: grabbing; }
+
+/* 分组上/下移按钮（横排） */
+.tag-group-order-btns {
+  display: flex;
+  flex-direction: row;
+  flex-shrink: 0;
+  gap: 2px;
+}
+.tag-group-move {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-dim);
+  font-size: 16px;
+  line-height: 1;
+  padding: 2px 8px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.tag-group-move:hover:not(:disabled) {
+  color: var(--accent);
+  background: var(--tag-bg);
+  border-color: var(--border);
+}
+.tag-group-move:disabled { opacity: 0.3; cursor: default; }
 .tag-group-block.dragging {
   opacity: 0.5;
   border-style: dashed;
@@ -324,7 +362,38 @@ body {
   border-top: 3px solid var(--accent);
 }
 
-.tag-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+/* 收起态：只留卡片头部（⠿ ↑↓ ▾ 分组名 删除组）。
+   一条规则同时覆盖「有表格」和「空分组（本就没有 .tag-table）」两种情况。 */
+.tag-group-block.collapsed .tag-table,
+.tag-group-block.collapsed .add-tag-row { display: none; }
+/* header 自带 margin-bottom:10px，收起时不清零会在卡片下留一段悬空空白 */
+.tag-group-block.collapsed .tag-group-header { margin-bottom: 0; }
+
+/* 分组收起 / 展开按钮 */
+.tag-group-toggle {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  font-size: 14px;
+  line-height: 1;
+  padding: 2px 4px;
+  border-radius: 4px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+.tag-group-toggle:hover { color: var(--accent); background: var(--tag-bg); }
+
+/* fixed + <colgroup>（见 renderGroup）：所有分组用同一套列宽，跨卡片表头对齐。
+   代价是内容不再撑开列宽，所以必须配 overflow-wrap —— 否则超长的
+   不可断词（如很长的别名）会窜出单元格压到相邻列。 */
+.tag-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  table-layout: fixed;
+  overflow-wrap: anywhere;
+}
 .tag-table th {
   text-align: left;
   padding: 6px 8px;

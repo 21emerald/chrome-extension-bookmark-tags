@@ -1188,4 +1188,17 @@ function bindEvents() {
 }
 
 // ---- 启动 ----
+
+// 与当前标签页无关的入口，必须无条件绑定。
+// 注意：不要挪进 bindEvents() —— 当活动标签页是 chrome:// 时 init() 会提前
+// return（显示「此页面不支持」），bindEvents() 不会执行，这个按钮就会点了没反应。
+$('#openOptionsBtn').addEventListener('click', async () => {
+  try {
+    await chrome.runtime.openOptionsPage();
+  } catch (e) {
+    console.error('[bookmark-tags] openOptionsPage failed:', e);
+  }
+  window.close();
+});
+
 init();

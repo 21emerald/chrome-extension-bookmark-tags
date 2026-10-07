@@ -63,6 +63,8 @@
           <div id="bmSelectedTags" class="bm-selected-tags"></div>
           <!-- 标签筛选面板 -->
           <div id="bmTagPanel" class="bm-tag-panel" style="display:none;"></div>
+          <!-- 条目数量统计 -->
+          <div id="bmCount" class="bm-count"></div>
         </div>
         <div id="bookmarkList" class="bookmark-list"></div>
         <div id="bmScrollSentinel"></div>
@@ -75,6 +77,8 @@
           <div class="action-bar">
             <input type="text" id="newGroupName" data-i18n-placeholder="options.tag_new_group_placeholder">
             <button id="addGroupBtn" class="btn-primary" data-i18n="options.tag_add_group">Add Group</button>
+            <!-- 文案由 updateTagCollapseAllBtn() 按状态填充，故不加 data-i18n -->
+            <button id="toggleAllGroupsBtn" class="btn-secondary btn-sm"></button>
           </div>
         </div>
         <div id="tagManagerContent" class="tag-manager"></div>
