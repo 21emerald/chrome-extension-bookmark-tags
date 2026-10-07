@@ -418,6 +418,56 @@ body {
 }
 .tag-table input:focus { border-color: var(--accent); }
 
+/* 操作列：链接图标 + 编辑 + 删除。列宽只有 12%，所以允许换行——
+   宁可这格占两行，也不能撑动列宽（各分组是独立表格，列宽必须一致）。 */
+.tag-actions { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.tag-actions .btn-sm { padding: 3px 7px; font-size: 11px; flex-shrink: 0; }
+
+/* 名称格：输入框占满剩余宽度，跳转图标紧跟其后且不被压缩 */
+.tag-name-cell { display: flex; align-items: center; gap: 6px; }
+.tag-name-cell input { flex: 1; min-width: 0; }
+.tag-link {
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  flex-shrink: 0;
+  opacity: .65;
+  user-select: none;
+}
+.tag-link:hover { opacity: 1; }
+
+/* 快捷标签行（搜索框下方） */
+.quick-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  /* 与上方搜索框拉开距离：.search-bar 自身没有下外边距，
+     少了这一条两者会紧贴在一起。 */
+  margin-top: 14px;
+  margin-bottom: 14px;
+}
+.quick-tags-label {
+  font-size: 11px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: .5px;
+}
+.quick-tag-chip {
+  background: var(--tag-accent-bg);
+  color: var(--accent);
+  border: 1px solid transparent;
+  border-radius: 10px;
+  padding: 3px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  user-select: none;
+  transition: all .15s;
+}
+.quick-tag-chip:hover { border-color: var(--accent); }
+.quick-tag-chip.active { background: var(--accent); color: #fff; }
+
 .tag-alias-list { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
 .tag-alias-chip {
   background: var(--tag-bg);
@@ -542,6 +592,23 @@ body {
 }
 .config-section h3 { font-size: 16px; margin-bottom: 12px; }
 .config-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+
+/* 首页地址：只读输入框占满剩余宽度，复制按钮不被压缩。
+   用等宽字体，便于肉眼核对 chrome-extension:// 那串 ID。 */
+#homeUrl {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text-dim);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  outline: none;
+}
+#homeUrl:focus { border-color: var(--accent); }
+#copyHomeUrlBtn { flex-shrink: 0; }
 .config-form { display: flex; flex-direction: column; gap: 12px; }
 .form-field label { display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 4px; }
 .form-field input {
@@ -586,6 +653,23 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   font-size: 13px;
+}
+/* 弹窗里的勾选行。上面两条 .modal .form-field label/input 是给文本框写的通用规则：
+   label 会被强制 display:block，input 会被拉成 width:100%。
+   直接在 .sync-toggle 上提高特异性还原，避免 checkbox 被撑满整行。 */
+.modal .form-field label.sync-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text);
+  margin-bottom: 0;
+}
+.modal .form-field label.sync-toggle input[type="checkbox"] {
+  width: auto;
+  padding: 0;
+  margin: 0;
+  flex-shrink: 0;
 }
 .modal .star-edit { display: inline-flex; gap: 2px; margin-top: 4px; }
 .modal .star-edit .star { cursor: pointer; font-size: 20px; color: var(--star-off); }

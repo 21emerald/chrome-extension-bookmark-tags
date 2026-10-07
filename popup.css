@@ -179,6 +179,36 @@ body {
 }
 .tag-chip .remove-tag:hover { opacity: 1; }
 
+/* 标签跳转链接图标 */
+.tag-chip .tag-link {
+  font-size: 10px;
+  opacity: 0.55;
+  cursor: pointer;
+}
+.tag-chip .tag-link:hover { opacity: 1; }
+
+/* ---- 快捷标签行（搜索框下方） ---- */
+.quick-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  padding: 4px 0 6px;
+}
+.quick-tags-label {
+  font-size: 10px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: .5px;
+}
+.tag-chip.quick { background: var(--tag-active); }
+/* 显式提高特异性：否则 .tag-chip.quick 会覆盖 .tag-chip.active 的背景与描边 */
+.tag-chip.quick.active {
+  background: var(--tag-active);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 /* ---- inline 添加 tag 输入 ---- */
 .tag-inline-input {
   background: var(--surface);
@@ -259,16 +289,27 @@ body {
 /* ---- tag 关联书签 ---- */
 #tagRelatedBms { max-height: 200px; overflow-y: auto; }
 .related-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-size: 11px;
   color: var(--text-dim);
   margin-bottom: 4px;
 }
+.related-title { flex: 1; min-width: 0; }
 .related-sort {
   font-size: 10px;
   color: var(--accent);
   cursor: pointer;
-  margin-left: 8px;
+  flex-shrink: 0;
 }
+.related-close {
+  font-size: 11px;
+  cursor: pointer;
+  opacity: .6;
+  flex-shrink: 0;
+}
+.related-close:hover { opacity: 1; }
 
 /* ---- 标签选择器（搜索筛选） ---- */
 #tagSelector {

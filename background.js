@@ -1,14 +1,20 @@
 // ============================================================
 // bookmark-tags background.js — 数据层 & 消息调度
-// v2.4.0 — preview/previewVideo + 版本化 Google Drive 同步 + 冲突合并
+// v2.5.0 — tag link/quick/home + 首页随机采样
 // ============================================================
 
 /* ---------- 数据模型 ----------
   Bookmark: { id, url, title, tags:[tagId], favorite:0-5, labels:[], contentTags:[], preview:'', previewVideo:'', createdAt, updatedAt }
   TagGroup: { id, name, order, updatedAt }
-  Tag:      { id, name, alias:[], tags:[tagId], groupId, order, updatedAt }
+  Tag:      { id, name, alias:[], tags:[tagId], groupId, order, updatedAt,
+              link:'', quick:false, home:false }
   SiteConfig:{ id, urlPattern, script, updatedAt }
   Config:   { syncEnabled, lastSyncAt, gdBaseVersion, gdDeviceId, gdDirty, locale, theme }
+
+  注意：link/quick/home 三个字段只加在 addTag 的字面量上。**不要**在 listTags() 里补默认值——
+  gdMerge 用 JSON.stringify(local) === JSON.stringify(remote) 判平局，若读取路径单方面注入新字段，
+  每个改动前创建的旧标签都会变成一次性假冲突。默认值只在 UI 层兜底：
+  tag.link || ''、!!tag.quick、!!tag.home。
 */
 
 const STORAGE_KEYS = {
@@ -27,6 +33,15 @@ function uid() {
 }
 
 function now() { return Date.now(); }
+
+/** 标签跳转链接的白名单校验：只放行 http/https/ftp，其余（含 javascript:、data:）一律返回 ''
+ *  与前端 popup.js / options.js 的 safeUrl 保持同一套规则。 */
+const TAG_LINK_RE = /^(https?|ftp):\/\/[^\s]+$/i;
+function sanitizeLink(u) {
+  if (typeof u !== 'string') return '';
+  const s = u.trim();
+  return TAG_LINK_RE.test(s) ? s : '';
+}
 
 async function getStore(key) {
   const r = await chrome.storage.local.get(key);
@@ -134,7 +149,8 @@ async function removeTagGroup(id) {
 
 async function listTags() { return getStore(STORAGE_KEYS.tags); }
 
-async function addTag({ name, alias = [], tags = [], groupId = '', order = 0 }) {
+async function addTag({ name, alias = [], tags = [], groupId = '', order = 0,
+                        link = '', quick = false, home = false }) {
   const all = await listTags();
   // 同名去重：如果已存在同名 tag，直接返回已有的
   const existing = all.find(t => t.name.toLowerCase() === name.toLowerCase());
@@ -144,7 +160,8 @@ async function addTag({ name, alias = [], tags = [], groupId = '', order = 0 }) 
     const maxOrder = sameGroup.reduce((m, t) => Math.max(m, t.order), 0);
     order = maxOrder + 1;
   }
-  const t = { id: uid(), name, alias, tags, groupId, order, updatedAt: now() };
+  const t = { id: uid(), name, alias, tags, groupId, order,
+              link: sanitizeLink(link), quick: !!quick, home: !!home, updatedAt: now() };
   all.push(t);
   await setStore(STORAGE_KEYS.tags, all);
   await markDirtyAndSync();
@@ -155,6 +172,11 @@ async function updateTag(id, patch) {
   const all = await listTags();
   const idx = all.findIndex(t => t.id === id);
   if (idx < 0) return null;
+  // link 是唯一需要过校验的字段：在写入前收口，使存储中的值始终是已净化的，
+  // 前端因此可以直接信任本函数的返回值（saved.link 为空即代表 URL 被拒）。
+  if (patch && typeof patch.link === 'string') {
+    patch = { ...patch, link: sanitizeLink(patch.link) };
+  }
   Object.assign(all[idx], patch, { updatedAt: now() });
   await setStore(STORAGE_KEYS.tags, all);
   await markDirtyAndSync();
@@ -177,8 +199,9 @@ async function removeTag(id) {
 
 // ---------- 展开标签（含 alias 和被标记的 tags） ----------
 
-async function expandTagIds(tagId) {
-  const allTags = await listTags();
+async function expandTagIds(tagId, preloadedTags = null) {
+  // preloadedTags：批量展开时传入一次读取的标签数组，避免每个标签都重读整个 store
+  const allTags = preloadedTags || await listTags();
   const tag = allTags.find(t => t.id === tagId);
   if (!tag) return [tagId];
   const result = new Set([tagId]);
@@ -199,6 +222,43 @@ async function expandTagIds(tagId) {
   tag.tags.forEach(tid => result.add(tid));
 
   return [...result];
+}
+
+// ---------- 首页随机采样 ----------
+
+const HOME_SAMPLE_LIMIT = 24;
+
+/** 首页数据源：取所有 home=true 的标签，展开（含 alias 与标记标签）后收集其下收藏，
+ *  随机洗牌并截取前 limit 条。
+ *
+ *  **纯读函数，绝不能调用 markDirtyAndSync()**：新标签页会频繁打开，一旦这里写入，
+ *  不仅会让 gdDirty 反复翻转，还会向用户其它标签页广播 storage 变更。 */
+async function homeSample({ limit = HOME_SAMPLE_LIMIT } = {}) {
+  const allTags = await listTags();
+  const homeTags = allTags.filter(t => t.home);
+  if (homeTags.length === 0) {
+    return { bookmarks: [], homeTagCount: 0, total: 0 };
+  }
+
+  const idSet = new Set();
+  for (const tag of homeTags) {
+    for (const id of await expandTagIds(tag.id, allTags)) idSet.add(id);
+  }
+
+  const all = await listBookmarks();
+  const pool = (all || []).filter(b => b.tags && b.tags.some(tid => idSet.has(tid)));
+
+  // Fisher–Yates
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+
+  return {
+    bookmarks: pool.slice(0, Math.max(0, limit)),
+    homeTagCount: homeTags.length,
+    total: pool.length,
+  };
 }
 
 // ---------- 站点配置 CRUD ----------
@@ -576,7 +636,7 @@ async function syncIfEnabled() {
 
 async function syncFromCloud({ force = false } = {}) {
   const config = await getConfig();
-  if (!force && !config.syncEnabled) return { ok: false, error: 'sync not enabled' };
+  if (!force && !config.syncEnabled) return { ok: false, error: 'general.sync_not_enabled' };
   try {
     const data = await chrome.storage.sync.get(Object.values(STORAGE_KEYS));
     let changed = false;
@@ -733,7 +793,7 @@ async function gdDownload(token, fileId) {
 
 async function gdVersionedPush(interactive = false, _retry = false) {
   let token = await gdGetToken(interactive);
-  if (!token) return { ok: false, error: '授权失败' };
+  if (!token) return { ok: false, error: 'general.auth_failed' };
 
   try {
     const config = await getConfig();
@@ -960,10 +1020,10 @@ async function gdResolveConflicts(resolutions) {
 
   // 读取远程数据
   const token = await gdGetToken(false);
-  if (!token) return { ok: false, error: '授权失败' };
+  if (!token) return { ok: false, error: 'general.auth_failed' };
 
   const existing = await gdFindFile(token);
-  if (!existing) return { ok: false, error: '远程无数据' };
+  if (!existing) return { ok: false, error: 'general.no_remote_data' };
   const remoteData = await gdDownload(token, existing.id);
 
   // 应用用户选择
@@ -1013,11 +1073,11 @@ async function gdSyncPush(interactive = false) {
 
 async function gdSyncPull(interactive = false, _retry = false) {
   let token = await gdGetToken(interactive);
-  if (!token) return { ok: false, error: '授权失败' };
+  if (!token) return { ok: false, error: 'general.auth_failed' };
 
   try {
     const existing = await gdFindFile(token);
-    if (!existing) return { ok: false, error: '云端无备份数据' };
+    if (!existing) return { ok: false, error: 'general.no_cloud_data' };
 
     const remoteData = await gdDownload(token, existing.id);
     const remoteVersion = remoteData._version || 0;
@@ -1101,6 +1161,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       case 'updateTag':           return await updateTag(msg.id, msg.patch);
       case 'removeTag':           return await removeTag(msg.id);
       case 'expandTagIds':        return await expandTagIds(msg.tagId);
+      case 'homeBookmarks':       return await homeSample(msg.params || {});
 
       case 'suggestTags':         return await suggestTags(msg.labels || [], msg.contentTags || []);
       case 'recentTags':          return await recentTags(msg.limit);
@@ -1123,7 +1184,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       case 'gdPull':              return await gdSyncPull(msg.interactive || false);
       case 'gdAuth': {
         const t = await gdRefreshToken(true);
-        return t ? { ok: true } : { ok: false, error: '授权失败' };
+        return t ? { ok: true } : { ok: false, error: 'general.auth_failed' };
       }
 
       case 'gdResolveConflicts':  return await gdResolveConflicts(msg.resolutions);

@@ -15,6 +15,28 @@ let conflictResolutions = [];
 function $(sel) { return document.querySelector(sel); }
 function $$(sel) { return document.querySelectorAll(sel); }
 function escHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+// escHtml 走 textContent→innerHTML，只转义 & < >，**不转义引号**，
+// 因此放进属性值（如 data-link="..."）会被引号截断甚至注入。属性一律用这个。
+function escAttr(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+// 与 background.js 的 sanitizeLink 同一套白名单：挡住 javascript: / data: 之类的伪协议
+function safeUrl(u) {
+  const s = String(u == null ? '' : u).trim();
+  return /^(https?|ftp):\/\/[^\s]+$/i.test(s) ? s : '';
+}
+function openTagLink(link) {
+  const url = safeUrl(link);
+  if (url) chrome.tabs.create({ url });
+}
+// 后台把面向用户的错误以 i18n key 返回（如 'general.auth_failed'），在这里翻译。
+// t() 对未知字符串会原样返回，所以运行时错误（e.message、'unknown action: …'）
+// 直接穿过也不会被破坏。
+function errText(res) {
+  return res && res.error ? t(res.error) : '';
+}
 
 function send(action, data = {}) {
   return new Promise((resolve, reject) => {
@@ -312,6 +334,10 @@ function toggleBmSearchTag(tagId) {
 }
 
 function renderBmSelectedTags() {
+  // 快捷标签的选中态来自 bmSelectedTagIds，必须在下面那个提前 return 之前刷新
+  // （清空标签筛选时走的正是提前 return 那条路径）。
+  renderQuickTags();
+
   const container = $('#bmSelectedTags');
   container.innerHTML = '';
   if (bmSelectedTagIds.length === 0) return;
@@ -329,12 +355,44 @@ function renderBmSelectedTags() {
   });
 }
 
-// ---- 标签排序辅助 ----
+// ---- 快捷标签行（搜索框下方） ----
+// 注意：循环变量必须用 tag/tg，**不能用 t** —— t 是 i18n 函数，
+// 在这里被遮蔽会让 t('key') 静默失效。
+function renderQuickTags() {
+  const container = $('#bmQuickTags');
+  if (!container) return;
+  const quick = allTags.filter(tag => tag.quick).sort((a, b) => a.order - b.order);
+  if (quick.length === 0) {
+    container.style.display = 'none';
+    container.innerHTML = '';
+    return;
+  }
+  container.style.display = 'flex';
+  container.innerHTML = '';
+  const label = document.createElement('span');
+  label.className = 'quick-tags-label';
+  label.textContent = t('options.quick_tags');
+  container.appendChild(label);
+  quick.forEach(tag => {
+    const sole = bmSelectedTagIds.length === 1 && bmSelectedTagIds[0] === tag.id;
+    const chip = document.createElement('span');
+    chip.className = 'quick-tag-chip' + (sole ? ' active' : '');
+    chip.textContent = tag.name;
+    chip.title = t('options.quick_tag_search', { name: tag.name });
+    chip.addEventListener('click', () => applyQuickTag(tag.id));
+    container.appendChild(chip);
+  });
+}
 
-function bmFirstTagName(bm) {
-  if (bm.tags.length === 0) return '';
-  const t = getTagById(bm.tags[0]);
-  return t ? t.name.toLowerCase() : '';
+// 点击快捷标签：把标签维度整体替换为这一个标签；再点同一个则清空。
+// 关键词、星级、排序三个维度都不动——快捷标签只负责标签这一维。
+// （本页 getFilteredBookmarks 用 AND，单元素时与 OR 等价，所以语义无歧义。）
+function applyQuickTag(tagId) {
+  bmSelectedTagIds = (bmSelectedTagIds.length === 1 && bmSelectedTagIds[0] === tagId)
+    ? [] : [tagId];
+  renderBmTagPanel();
+  renderBmSelectedTags();   // 内部会刷新快捷标签的选中态
+  filterAndRenderBookmarks();
 }
 
 // ---- 筛选 + 排序 ----
@@ -391,9 +449,11 @@ function getFilteredBookmarks() {
   } else if (sort === 'favorite') {
     bms.sort((a, b) => b.favorite - a.favorite || b.createdAt - a.createdAt);
   } else if (sort === 'tagAsc') {
-    bms.sort((a, b) => bmFirstTagName(a).localeCompare(bmFirstTagName(b)) || b.createdAt - a.createdAt);
+    // 按标签**数量**升序，与 background.js 的 searchBookmarks 语义保持一致
+    // （此前这里是按「第一个标签的名字」字典序排，与排序名不符）。
+    bms.sort((a, b) => (a.tags || []).length - (b.tags || []).length || b.createdAt - a.createdAt);
   } else if (sort === 'tagDesc') {
-    bms.sort((a, b) => bmFirstTagName(b).localeCompare(bmFirstTagName(a)) || b.createdAt - a.createdAt);
+    bms.sort((a, b) => (b.tags || []).length - (a.tags || []).length || b.createdAt - a.createdAt);
   }
 
   return bms;
@@ -757,9 +817,14 @@ function renderTagManager() {
       tags.sort((a, b) => a.order - b.order).forEach(tag => {
         const tr = document.createElement('tr');
 
-        // 名称
+        // 名称 + 跳转链接图标。图标紧跟在名称右侧（而不是塞进操作列）：
+        // 它说明「这个标签是什么」，跟名称一起读才顺。名称格用 flex 排布，
+        // 输入框占满剩余宽度，图标固定不缩。
         const tdName = document.createElement('td');
-        tdName.innerHTML = `<input type="text" value="${escHtml(tag.name)}" class="tag-name-input" data-tid="${tag.id}">`;
+        tdName.innerHTML = `<div class="tag-name-cell">
+            <input type="text" value="${escAttr(tag.name)}" class="tag-name-input" data-tid="${tag.id}">
+            ${tag.link ? `<span class="tag-link" data-link="${escAttr(tag.link)}" title="${escAttr(t('options.tag_jump'))}">🔗</span>` : ''}
+          </div>`;
         tr.appendChild(tdName);
 
         // 分组下拉选择
@@ -811,9 +876,13 @@ function renderTagManager() {
         tdTags.appendChild(tagsDiv);
         tr.appendChild(tdTags);
 
-        // 操作
+        // 操作：编辑 + 删除
+        // 注意 <colgroup> 的列宽保持不变——每个分组是独立表格，列宽不一致表头就会错位。
         const tdAct = document.createElement('td');
-        tdAct.innerHTML = `<button class="btn-danger btn-sm del-tag" data-tid="${tag.id}">${t('options.tag_delete')}</button>`;
+        tdAct.innerHTML = `<div class="tag-actions">
+            <button type="button" class="btn-secondary btn-sm edit-tag" data-tid="${tag.id}">${t('options.tag_edit')}</button>
+            <button type="button" class="btn-danger btn-sm del-tag" data-tid="${tag.id}">${t('options.tag_delete')}</button>
+          </div>`;
         tr.appendChild(tdAct);
 
         tbody.appendChild(tr);
@@ -851,6 +920,83 @@ function renderTagManager() {
 
   bindTagManagerEvents();
   updateTagCollapseAllBtn();
+  // 标签的 quick 标记可能刚变过；renderTagManager() 已在 init、storage 监听
+  // 以及全部同步/导入/清空路径上被调用，所以这一个挂点就能覆盖。
+  renderQuickTags();
+}
+
+// ---- 标签编辑弹窗：链接 + 快捷标签 + 首页展示 ----
+// 沿用 editBookmark() 的弹窗结构（.modal-overlay > .modal > .form-field + .modal-actions），
+// 不新造一套 modal 系统。
+function editTag(id) {
+  const tag = getTagById(id);
+  if (!tag) return;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal">
+      <h3>${t('options.tag_edit_title')} · ${escHtml(tag.name)}</h3>
+      <div class="form-field">
+        <label>${t('options.tag_field_link')}</label>
+        <input type="text" id="editTagLink" value="${escAttr(tag.link || '')}"
+               placeholder="${escAttr(t('options.tag_link_placeholder'))}">
+      </div>
+      <div class="form-field">
+        <label class="sync-toggle">
+          <input type="checkbox" id="editTagQuick" ${tag.quick ? 'checked' : ''}>
+          <span>${t('options.tag_field_quick')}</span>
+        </label>
+      </div>
+      <div class="form-field">
+        <label class="sync-toggle">
+          <input type="checkbox" id="editTagHome" ${tag.home ? 'checked' : ''}>
+          <span>${t('options.tag_field_home')}</span>
+        </label>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-secondary" id="editTagCancel">${t('options.bm_cancel')}</button>
+        <button class="btn-primary" id="editTagSave">${t('options.bm_save')}</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  // 点击 overlay 外部空白处关闭
+  overlay.addEventListener('mousedown', (e) => {
+    if (e.target === overlay) overlay.remove();
+  });
+
+  // ESC 键关闭（document.body.contains 守卫避免陈旧监听器）
+  const escHandler = (e) => {
+    if (e.key === 'Escape' && document.body.contains(overlay)) {
+      overlay.remove();
+      document.removeEventListener('keydown', escHandler);
+    }
+  };
+  document.addEventListener('keydown', escHandler);
+
+  overlay.querySelector('#editTagCancel').addEventListener('click', () => {
+    overlay.remove();
+    document.removeEventListener('keydown', escHandler);
+  });
+
+  overlay.querySelector('#editTagSave').addEventListener('click', async () => {
+    const raw = overlay.querySelector('#editTagLink').value.trim();
+    // 后台的 updateTag 会把 link 过一遍 sanitizeLink 并返回存储后的记录，
+    // 所以 saved.link 为空就等于「这个 URL 被拒了」——比在前端重复一遍规则更可信。
+    const saved = await send('updateTag', { id, patch: {
+      link: raw,
+      quick: overlay.querySelector('#editTagQuick').checked,
+      home:  overlay.querySelector('#editTagHome').checked,
+    }});
+    if (raw && saved && !saved.link) alert(t('options.tag_link_invalid'));
+    overlay.remove();
+    document.removeEventListener('keydown', escHandler);
+    await loadAll();
+    renderTagManager();
+    filterAndRenderBookmarks();
+  });
 }
 
 // 所有可收起单元的 id（含未分组）——「全部收起 / 展开」以此为全集
@@ -994,6 +1140,20 @@ function bindTagManagerEvents() {
           });
         }
       }, { excludeIds: [tid], activeIds: tag.tags, multi: false });
+    });
+  });
+
+  // 编辑标签（打开弹窗）——必须在这里注册：renderTagManager() 每次都会重建整棵 DOM，
+  // 挂到外面会导致监听器随重渲染累积。
+  $$('.edit-tag').forEach(btn => {
+    btn.addEventListener('click', () => editTag(btn.dataset.tid));
+  });
+
+  // 跳转链接图标（现在位于名称格内，选择器不要再限定 .tag-actions）
+  $$('.tag-link').forEach(el => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openTagLink(el.dataset.link);
     });
   });
 
@@ -1224,7 +1384,7 @@ function createSiteFormEl(id, data) {
 async function debugSiteConfig(siteId) {
   const sc = allSiteConfigs.find(s => s.id === siteId);
   if (!sc || !sc.script) {
-    alert('No script to debug');
+    alert(t('options.site_debug_no_script'));
     return;
   }
 
@@ -1243,28 +1403,28 @@ async function debugSiteConfig(siteId) {
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
     <div class="modal" style="max-width:700px;">
-      <h3>🧪 Site Config Debug</h3>
+      <h3>${t('options.site_debug_title')}</h3>
       <div class="site-debug-info">
-        <div><strong>URL Pattern:</strong> <code>${escHtml(sc.urlPattern)}</code></div>
+        <div><strong>${t('options.site_url_label')}:</strong> <code>${escHtml(sc.urlPattern)}</code></div>
       </div>
       <div class="form-field">
-        <label>Test URL:</label>
+        <label>${t('options.site_debug_test_url')}</label>
         <div style="display:flex;gap:6px;align-items:center;">
-          <input type="text" id="debugUrlInput" value="${escHtml(defaultUrl)}" placeholder="https://example.com/page" style="flex:1;">
-          <span id="debugUrlMatch" style="font-size:12px;flex-shrink:0;">${defaultUrl ? (defaultMatches ? '✅ Match' : '❌ No match') : ''}</span>
+          <input type="text" id="debugUrlInput" value="${escAttr(defaultUrl)}" placeholder="https://example.com/page" style="flex:1;">
+          <span id="debugUrlMatch" style="font-size:12px;flex-shrink:0;">${defaultUrl ? (defaultMatches ? t('options.site_debug_match') : t('options.site_debug_no_match_ui')) : ''}</span>
         </div>
       </div>
       <div class="form-field">
-        <label>Script:</label>
+        <label>${t('options.site_script_label')}</label>
         <pre style="background:var(--bg);padding:8px;border-radius:4px;font-size:12px;overflow:auto;max-height:120px;">${escHtml(sc.script)}</pre>
       </div>
       <div class="form-field">
-        <label>Result:</label>
-        <pre id="debugResult" style="background:var(--bg);padding:8px;border-radius:4px;font-size:12px;overflow:auto;max-height:200px;color:var(--text-dim);">Enter a URL and click Run</pre>
+        <label>${t('options.site_debug_result_label')}</label>
+        <pre id="debugResult" style="background:var(--bg);padding:8px;border-radius:4px;font-size:12px;overflow:auto;max-height:200px;color:var(--text-dim);">${t('options.site_debug_result_hint')}</pre>
       </div>
       <div class="modal-actions">
-        <button class="btn-primary" id="debugRunBtn">▶ Run Script</button>
-        <button class="btn-secondary" id="debugCloseBtn">Close</button>
+        <button class="btn-primary" id="debugRunBtn">${t('options.site_debug_run')}</button>
+        <button class="btn-secondary" id="debugCloseBtn">${t('options.site_debug_close')}</button>
       </div>
     </div>
   `;
@@ -1280,19 +1440,19 @@ async function debugSiteConfig(siteId) {
     if (!url) { matchIndicator.textContent = ''; return; }
     let m = false;
     try { m = new RegExp(sc.urlPattern).test(url); } catch {}
-    matchIndicator.textContent = m ? '✅ Match' : '❌ No match';
+    matchIndicator.textContent = m ? t('options.site_debug_match') : t('options.site_debug_no_match_ui');
   });
 
   const runDebug = async () => {
     const url = urlInput.value.trim();
-    if (!url) { alert('Please enter a URL to test'); return; }
+    if (!url) { alert(t('options.site_debug_enter_url')); return; }
 
     // 检查匹配
     let matches = false;
     try { matches = new RegExp(sc.urlPattern).test(url); } catch {}
-    matchIndicator.textContent = matches ? '✅ Match' : '❌ No match';
+    matchIndicator.textContent = matches ? t('options.site_debug_match') : t('options.site_debug_no_match_ui');
 
-    resultEl.textContent = 'Executing...';
+    resultEl.textContent = t('options.site_debug_executing');
     resultEl.style.color = 'var(--text-dim)';
 
     try {
@@ -1325,11 +1485,11 @@ async function debugSiteConfig(siteId) {
         resultEl.textContent = JSON.stringify(result, null, 2);
         resultEl.style.color = '#4caf50';
       } else {
-        resultEl.textContent = 'Script returned null or no result.\n\nPossible causes:\n- Page CSP blocks eval in MAIN world\n- Script threw an error\n- chrome.scripting.executeScript failed';
+        resultEl.textContent = t('options.site_debug_no_result');
         resultEl.style.color = 'var(--danger)';
       }
     } catch (e) {
-      resultEl.textContent = 'Error: ' + (e.message || String(e));
+      resultEl.textContent = t('general.error') + ': ' + (e.message || String(e));
       resultEl.style.color = 'var(--danger)';
     }
   };
@@ -1364,6 +1524,37 @@ async function loadConfig() {
 // ================ 全局事件 ================
 
 function bindGlobalEvents() {
+  // 打开首页（不再接管新标签页，所以需要一个显式入口）
+  $('#openHomeBtn').addEventListener('click', () => {
+    chrome.tabs.create({ url: chrome.runtime.getURL('home.html') });
+  });
+
+  // 首页地址：Chrome 没有 API 让扩展改启动页（chrome.settingsPrivate 只对内置扩展开放，
+  // 唯一支持的 chrome_settings_overrides 是清单里的静态声明，还不适用 chrome-extension://），
+  // 所以只能把地址给出来让用户手动粘到设置里。这里提供地址 + 复制按钮 + 步骤说明。
+  const homeUrlInput = $('#homeUrl');
+  if (homeUrlInput) homeUrlInput.value = chrome.runtime.getURL('home.html');
+
+  const copyBtn = $('#copyHomeUrlBtn');
+  if (copyBtn) {
+    copyBtn.addEventListener('click', async () => {
+      const url = homeUrlInput.value;
+      let ok = false;
+      // 先试剪贴板 API；扩展页里没有 clipboardWrite 权限时可能被拒，再退回选中+execCommand。
+      try {
+        await navigator.clipboard.writeText(url);
+        ok = true;
+      } catch {
+        homeUrlInput.select();
+        homeUrlInput.setSelectionRange(0, url.length);
+        try { ok = document.execCommand('copy'); } catch {}
+      }
+      const original = t('options.config_home_copy');
+      copyBtn.textContent = t(ok ? 'options.config_home_copied' : 'options.config_home_select');
+      setTimeout(() => { copyBtn.textContent = original; }, 1500);
+    });
+  }
+
   // 全部收起 / 全部展开
   // 注意：这里只绑一次（bindGlobalEvents 由 init() 调一次）。不要挪进
   // bindTagManagerEvents() —— 那个函数每次 renderTagManager() 都会执行，
@@ -1548,7 +1739,7 @@ function bindGlobalEvents() {
       await loadAll();
       filterAndRenderBookmarks(); renderTagManager(); renderSiteConfigs(); loadConfig();
     } else {
-      $('#syncStatus').textContent = t('options.sync_pull_failed') + (r.error || '');
+      $('#syncStatus').textContent = t('options.sync_pull_failed') + errText(r);
     }
   });
 
@@ -1568,7 +1759,7 @@ function bindGlobalEvents() {
           $('#gdStatus').textContent = t('options.config_gd_auto_on');
           await loadAll();
         } else {
-          $('#gdStatus').textContent = t('options.config_gd_push_failed') + (r.error || '');
+          $('#gdStatus').textContent = t('options.config_gd_push_failed') + errText(r);
           gdAutoSyncCb.checked = false;
           currentConfig.gdAutoSync = false;
           await send('saveConfig', { config: currentConfig });
@@ -1588,7 +1779,7 @@ function bindGlobalEvents() {
       if (r.ok) {
         $('#gdStatus').textContent = t('options.config_gd_auth_success');
       } else {
-        $('#gdStatus').textContent = t('options.config_gd_auth_failed') + (r.error || '');
+        $('#gdStatus').textContent = t('options.config_gd_auth_failed') + errText(r);
       }
     });
   }
@@ -1602,7 +1793,7 @@ function bindGlobalEvents() {
       if (r.ok) {
         $('#gdStatus').textContent = t('options.config_gd_push_success') + formatDate(Date.now()) + ')';
       } else {
-        $('#gdStatus').textContent = t('options.config_gd_push_failed') + (r.error || '');
+        $('#gdStatus').textContent = t('options.config_gd_push_failed') + errText(r);
       }
     });
   }
@@ -1622,7 +1813,7 @@ function bindGlobalEvents() {
         loadConfig();
         $('#gdStatus').textContent = r.pulled ? t('options.config_gd_pull_success') : t('options.config_gd_pull_no_data');
       } else {
-        $('#gdStatus').textContent = t('options.config_gd_pull_failed') + (r.error || '');
+        $('#gdStatus').textContent = t('options.config_gd_pull_failed') + errText(r);
       }
     });
   }
@@ -1736,7 +1927,7 @@ async function applyConflictResolutions() {
     renderSiteConfigs();
     loadConfig();
   } else {
-    alert('Error: ' + (result.error || 'unknown'));
+    alert(t('general.error') + ': ' + (result.error ? t(result.error) : 'unknown'));
   }
 }
 

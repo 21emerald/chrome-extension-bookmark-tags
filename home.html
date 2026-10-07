@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title data-i18n="home.page_title">bookmark-tags — New Tab</title>
+  <!-- 必须在样式表之前：同步应用主题，避免首屏闪烁 -->
+  <script src="theme.js"></script>
+  <link rel="stylesheet" href="home.css">
+</head>
+<body>
+  <div class="home-wrap">
+    <header class="home-header">
+      <span class="home-brand" data-i18n="options.logo">🔖 bookmark-tags</span>
+      <span class="home-count" id="homeCount"></span>
+      <span class="home-actions">
+        <!-- 显示方式切换：三个模式，选择存入 bt_config.homeDisplay -->
+        <span class="home-view" id="homeView">
+          <button type="button" class="home-view-btn" data-view="card" data-i18n="home.view_card">Cards</button>
+          <button type="button" class="home-view-btn" data-view="card-preview" data-i18n="home.view_card_preview">Cards + preview</button>
+          <button type="button" class="home-view-btn" data-view="list" data-i18n="home.view_list">List</button>
+        </span>
+        <label class="home-autoplay">
+          <input type="checkbox" id="homeAutoplay">
+          <span data-i18n="home.autoplay">Auto-play videos</span>
+        </label>
+        <button type="button" id="homeReshuffle" class="home-btn" data-i18n="home.reshuffle">Shuffle</button>
+        <button type="button" id="homeOptionsBtn" class="home-btn" data-i18n="home.open_options">Tag Manager</button>
+      </span>
+    </header>
+    <main id="homeGrid" class="home-grid"></main>
+    <div id="homeEmpty" class="home-empty" style="display:none;"></div>
+  </div>
+  <script src="locales.js"></script>
+  <script src="home.js"></script>
+</body>
+</html>

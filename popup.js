@@ -14,6 +14,8 @@ let pendingPreview = '';
 let pendingPreviewVideo = '';
 let autoSelectedTagIds = [];
 let relatedSortMode = 'newest';
+// 当前展示「关联书签」列表的标签 id；再点同一个标签即可收起列表
+let relatedTagId = null;
 
 // Tag picker state
 let tagPickerCallback = null;
@@ -28,6 +30,22 @@ let dragState = null; // { tagId, sourceGroupId, el }
 function $(sel) { return document.querySelector(sel); }
 function $$(sel) { return document.querySelectorAll(sel); }
 function escHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+// escHtml 走 textContent→innerHTML，只转义 & < >，**不转义引号**，
+// 因此放进属性值（如 data-link="..."）会被引号截断甚至注入。属性一律用这个。
+function escAttr(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+// 与 background.js 的 sanitizeLink 同一套白名单：挡住 javascript: / data: 之类的伪协议
+function safeUrl(u) {
+  const s = String(u == null ? '' : u).trim();
+  return /^(https?|ftp):\/\/[^\s]+$/i.test(s) ? s : '';
+}
+function openTagLink(link) {
+  const url = safeUrl(link);
+  if (url) chrome.tabs.create({ url });
+}
 
 function send(action, data = {}) {
   return new Promise((resolve, reject) => {
@@ -56,10 +74,18 @@ async function init() {
   applyLocale();
 
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  // chrome:// 页面（含 chrome://newtab）提前返回。
   if (!tab || !tab.url || tab.url.startsWith('chrome://')) {
     $('#notBookmarkedView').style.display = 'block';
     $('#newBmTitle').value = t('popup.page_not_supported');
+    // renderGroupedTags() 必须在 allTags 赋值**之前**调用：保持它在 chrome:// 上的
+    // 输出与改动前完全一致（allTags 为空 → 不渲染任何标签 chip）。
     renderGroupedTags();
+    // 快捷标签行与「当前页面」无关，chrome:// 上同样应该能用它检索书签
+    // （applyQuickTag → doSearch 自成一体，不依赖 bindEvents）。
+    allTags = await send('listTags') || [];
+    allTagGroups = await send('listTagGroups') || [];
+    renderQuickTags();
     return;
   }
 
@@ -90,6 +116,7 @@ async function init() {
   }
 
   renderGroupedTags();
+  renderQuickTags();
   bindEvents();
 }
 
@@ -209,9 +236,12 @@ function renderBmTags() {
     if (!tag) return;
     const chip = document.createElement('span');
     chip.className = 'tag-chip active';
-    chip.innerHTML = `${escHtml(tag.name)}<span class="remove-tag" data-tid="${tid}">✕</span>`;
+    chip.innerHTML = `${escHtml(tag.name)}`
+      + (tag.link ? `<span class="tag-link" data-link="${escAttr(tag.link)}" title="${escAttr(t('popup.tag_jump'))}">🔗</span>` : '')
+      + `<span class="remove-tag" data-tid="${tid}">✕</span>`;
     chip.addEventListener('click', (e) => {
-      if (e.target.classList.contains('remove-tag')) removeTagFromBookmark(tid);
+      if (e.target.classList.contains('tag-link')) openTagLink(tag.link);
+      else if (e.target.classList.contains('remove-tag')) removeTagFromBookmark(tid);
       else showTagRelatedBookmarks(tid);
     });
     container.appendChild(chip);
@@ -455,16 +485,32 @@ function removeSuggestRow(container, field) {
   // 可以标记已应用
 }
 
+/** 收起「关联书签」列表。此前这个列表一旦展开就没有任何关闭入口。 */
+function hideTagRelatedBookmarks() {
+  relatedTagId = null;
+  const container = $('#tagRelatedBms');
+  container.style.display = 'none';
+  container.innerHTML = '';
+}
+
 async function showTagRelatedBookmarks(tagId) {
+  const container = $('#tagRelatedBms');
+  // 再点一次同一个标签 = 收起列表
+  if (relatedTagId === tagId && container.style.display !== 'none') {
+    hideTagRelatedBookmarks();
+    return;
+  }
+  relatedTagId = tagId;
+
   const sort = relatedSortMode;
   const results = await send('searchBookmarks', { params: { title: '', tagIds: [tagId], favorite: 0, sort } });
-  const container = $('#tagRelatedBms');
   container.style.display = 'block';
   const tag = getTagById(tagId);
   container.innerHTML = `
     <div class="related-header">
-      ${t('popup.related_bookmarks', { name: tag?.name || '' })}
+      <span class="related-title">${t('popup.related_bookmarks', { name: tag?.name || '' })}</span>
       <span class="related-sort" id="relatedSortBtn">${sort === 'newest' ? t('popup.sort_newest') : t('popup.sort_favorite')}</span>
+      <span class="related-close" id="relatedCloseBtn" title="${escAttr(t('popup.close'))}">✕</span>
     </div>
   `;
   results.forEach(bm => {
@@ -487,6 +533,8 @@ async function showTagRelatedBookmarks(tagId) {
       showTagRelatedBookmarks(tagId);
     });
   }
+  const closeBtn = container.querySelector('#relatedCloseBtn');
+  if (closeBtn) closeBtn.addEventListener('click', hideTagRelatedBookmarks);
 }
 
 // ---- 未收藏视图 ----
@@ -753,15 +801,23 @@ function renderGroupedTags() {
     list.addEventListener('dragleave', onGroupDragLeave);
     list.addEventListener('drop', onGroupDrop);
 
-    tags.forEach(t => {
+    // 循环变量必须叫 tag 而不是 t：t 是 i18n 函数，叫 t 会让下面的
+    // t('popup.tag_jump') 变成「调用一个标签对象」，整段渲染直接抛错中断。
+    tags.forEach(tag => {
       const chip = document.createElement('span');
-      const isActive = currentBookmark && currentBookmark.tags.includes(t.id);
+      const isActive = currentBookmark && currentBookmark.tags.includes(tag.id);
       chip.className = 'tag-chip' + (isActive ? ' active' : '');
-      chip.textContent = t.name;
-      chip.dataset.tagId = t.id;
+      // draggable="false" 不可省：onTagDragStart 用 e.target.closest('.tag-chip[draggable]')
+      // 找拖拽源，图标若不排除，从 🔗 上起拖会被当成拖标签。
+      chip.innerHTML = `${escHtml(tag.name)}`
+        + (tag.link ? `<span class="tag-link" draggable="false" title="${escAttr(t('popup.tag_jump'))}">🔗</span>` : '');
+      chip.dataset.tagId = tag.id;
       chip.dataset.groupId = gid;
       chip.draggable = true;
-      chip.addEventListener('click', () => toggleTag(t.id));
+      chip.addEventListener('click', (e) => {
+        if (e.target.classList.contains('tag-link')) { openTagLink(tag.link); return; }
+        toggleTag(tag.id);
+      });
       // 拖拽事件
       chip.addEventListener('dragstart', onTagDragStart);
       chip.addEventListener('dragend', onTagDragEnd);
@@ -860,6 +916,10 @@ function renderGroupedTags() {
 // ---- 拖拽事件处理 ----
 
 function onTagDragStart(e) {
+  // 从跳转图标起拖不算拖标签。这里必须显式排除：closest 会从图标向上找到 chip，
+  // 所以光靠图标上的 draggable="false" 并不足以拦住（属性选择器 [draggable] 也只认存在性）。
+  // 提前 return 是安全的：dragend / dragover 都能处理 dragState 为 null。
+  if (e.target.closest('.tag-link')) return;
   const chip = e.target.closest('.tag-chip[draggable]');
   if (!chip) return;
   dragState = { tagId: chip.dataset.tagId, sourceGroupId: chip.dataset.groupId, el: chip };
@@ -1092,12 +1152,71 @@ function renderTagSelector() {
       chip.addEventListener('click', () => {
         if (selectedTagIds.includes(t.id)) selectedTagIds = selectedTagIds.filter(x => x !== t.id);
         else selectedTagIds.push(t.id);
-        renderTagSelector(); doSearch();
+        renderTagSelector(); searchOrClearResults();
       });
       list.appendChild(chip);
     });
     container.appendChild(list);
   }
+  // 快捷标签的选中态跟随 selectedTagIds，而本函数是它的唯一刷新入口
+  renderQuickTags();
+}
+
+// ---- 快捷标签行（搜索框下方） ----
+// 注意：循环变量必须用 tag，**不能用 t** —— t 是 i18n 函数，
+// 在本文件里已被多处 forEach 回调遮蔽。
+function renderQuickTags() {
+  const container = $('#quickTags');
+  if (!container) return;
+  const quick = allTags.filter(tag => tag.quick).sort((a, b) => a.order - b.order);
+  if (quick.length === 0) {
+    container.style.display = 'none';
+    container.innerHTML = '';
+    return;
+  }
+  container.style.display = 'flex';
+  container.innerHTML = '';
+  const label = document.createElement('span');
+  label.className = 'quick-tags-label';
+  label.textContent = t('popup.quick_tags');
+  container.appendChild(label);
+  quick.forEach(tag => {
+    const sole = selectedTagIds.length === 1 && selectedTagIds[0] === tag.id;
+    const chip = document.createElement('span');
+    chip.className = 'tag-chip quick' + (sole ? ' active' : '');
+    chip.textContent = tag.name;
+    chip.title = tag.name;
+    chip.addEventListener('click', () => applyQuickTag(tag.id));
+    container.appendChild(chip);
+  });
+}
+
+/** 取消筛选后不要直接 doSearch()：此时 title/tagIds/favorite 全为空，
+ *  searchBookmarks 会把整库书签都返回，看起来就像「列表没有消失」。
+ *  没有任何筛选条件时改为把结果区收起来；还有关键词或星级时照常搜索。 */
+function searchOrClearResults() {
+  const hasFilter = !!$('#searchInput').value.trim()
+    || selectedTagIds.length > 0
+    || filterFavorite > 0;
+  if (!hasFilter) {
+    const container = $('#searchResults');
+    container.innerHTML = '';
+    container.style.display = 'none';
+    return;
+  }
+  doSearch();
+}
+
+// 点击快捷标签：把标签维度替换为这一个标签；再点同一个则清空。
+// 搜索用的是 background 的 searchBookmarks，它对 expandTagIds 展开后的 id 取 OR，
+// 也就是「该标签 + 其别名同类标签 + 其标记的标签」都会被搜到 —— 这正是快捷入口该有的语义。
+// 也正因为结果集会比 chip 上显示的更宽，这里选择替换而非追加。
+function applyQuickTag(tagId) {
+  selectedTagIds = (selectedTagIds.length === 1 && selectedTagIds[0] === tagId)
+    ? [] : [tagId];
+  $('#tagSelector').style.display = selectedTagIds.length ? 'block' : 'none';
+  renderTagSelector();
+  searchOrClearResults();
 }
 
 // ---- 事件绑定 ----
@@ -1170,7 +1289,7 @@ function bindEvents() {
     if ($('#tagPicker').style.display !== 'none') renderTagPickerContent($('#searchInput').value.trim());
   });
 
-  $('#tagSelectorClear').addEventListener('click', () => { selectedTagIds = []; renderTagSelector(); doSearch(); });
+  $('#tagSelectorClear').addEventListener('click', () => { selectedTagIds = []; renderTagSelector(); searchOrClearResults(); });
 
   $('#starFilter').addEventListener('click', (e) => {
     const star = e.target.closest('.star'); if (!star) return;
@@ -1197,6 +1316,17 @@ $('#openOptionsBtn').addEventListener('click', async () => {
     await chrome.runtime.openOptionsPage();
   } catch (e) {
     console.error('[bookmark-tags] openOptionsPage failed:', e);
+  }
+  window.close();
+});
+
+// 首页不再接管新标签页（Chrome 不支持运行时开关，去掉覆盖后新标签页恢复浏览器默认），
+// 因此这里给一个显式入口。同样必须绑在模块作用域：bindEvents() 在 chrome:// 页面会被跳过。
+$('#openHomeBtn').addEventListener('click', async () => {
+  try {
+    await chrome.tabs.create({ url: chrome.runtime.getURL('home.html') });
+  } catch (e) {
+    console.error('[bookmark-tags] open home failed:', e);
   }
   window.close();
 });

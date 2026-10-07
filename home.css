@@ -1,0 +1,236 @@
+/* ============================================================
+   bookmark-tags home.css — 新标签页首页
+   ============================================================ */
+
+/* token 块与 options.css 的 :root 保持一致。
+   本项目没有构建步骤，无法按需拆分样式，所以这里选择重复这二十来行，
+   而不是 <link> options.css —— 后者带着 body/.sidebar/.content 的整页布局，
+   会和本页的网格打架。（popup.css 已经做过同样的取舍。） */
+:root {
+  color-scheme: light dark;
+  --bg: light-dark(#f5f5fa, #1e1e2e);
+  --surface: light-dark(#ffffff, #2a2a3c);
+  --border: light-dark(#e0e0ea, #3a3a50);
+  --text: light-dark(#222233, #e0e0e8);
+  --text-dim: #8888a0;
+  --accent: #7c6ff7;
+  --accent-hover: #9580ff;
+  --accent-light: light-dark(#7c6ff715, #7c6ff725);
+  --tag-bg: light-dark(#eeeef5, #33334a);
+  --radius: 8px;
+  --shadow: light-dark(0 1px 3px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.45));
+}
+
+/* 无 data-theme 属性 == system（跟随 prefers-color-scheme） */
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"]  { color-scheme: dark; }
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  font-size: 14px;
+}
+
+.home-wrap {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 48px 24px 80px;
+}
+
+.home-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 28px;
+  flex-wrap: wrap;
+}
+.home-brand { font-size: 20px; font-weight: 600; }
+.home-count { font-size: 12px; color: var(--text-dim); flex: 1; }
+.home-actions { display: flex; gap: 8px; }
+
+.home-btn {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  padding: 6px 14px;
+  font-size: 13px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.home-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ---- 显示方式切换 ---- */
+.home-view {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.home-view-btn {
+  background: var(--surface);
+  border: none;
+  border-right: 1px solid var(--border);
+  color: var(--text-dim);
+  padding: 6px 12px;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+}
+.home-view-btn:last-child { border-right: none; }
+.home-view-btn:hover { color: var(--accent); }
+.home-view-btn.active {
+  background: var(--accent-light);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.home-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+}
+
+/* 列表模式：单列，卡片摊平成紧凑行 */
+.home-grid.view-list {
+  grid-template-columns: 1fr;
+  gap: 4px;
+}
+.home-grid.view-list .home-card {
+  flex-direction: row;
+  /* 顶部对齐：标签换行成多行时，标题/URL 不会飘在这一行的中间 */
+  align-items: flex-start;
+  gap: 12px;
+  padding: 8px 12px;
+  box-shadow: none;
+  transform: none;
+}
+.home-grid.view-list .home-card:hover { transform: none; }
+/* 列表模式三列的宽度约束。
+   要点：
+   1. flex-basis 用 auto（内容宽）而不是 0%——标题写成 flex:1 时基数是 0，
+      一旦标签块很宽，标题会被压缩到 0 宽而消失。
+   2. 标签块必须 min-width:0 + max-width 封顶，才能收缩并在自己分到的宽度内换行。
+      原先它是 flex-shrink:0，基数等于 max-content（所有 chip 排成一行），
+      标签一多就顶出卡片、冲出可视区——这就是「超出显示范围而不是折叠」的原因。 */
+.home-grid.view-list .home-card-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  -webkit-line-clamp: 1;
+}
+.home-grid.view-list .home-card-url {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 34%;
+}
+.home-grid.view-list .home-card-tags {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 45%;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+/* 预览图模式 */
+.home-card-preview {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: 6px;
+  background: var(--tag-bg);
+  margin-bottom: 2px;
+}
+
+/* 有 previewVideo 时的媒体块：缩略图 + 覆盖其上的静音循环视频 */
+.home-card-media {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--tag-bg);
+  margin-bottom: 2px;
+}
+.home-card-thumb,
+.home-card-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.home-card-thumb { z-index: 1; }
+.home-card-video { z-index: 0; opacity: 0; transition: opacity .2s; }
+.home-card-video.playing { z-index: 2; opacity: 1; }
+/* 没有缩略图时直接显示视频本身（浏览器会渲染首帧） */
+.home-card-video.solo { z-index: 2; opacity: 1; }
+
+/* 列表布局下不展示媒体 */
+.home-grid.view-list .home-card-preview,
+.home-grid.view-list .home-card-media { display: none; }
+
+/* 自动播放开关 */
+.home-autoplay {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-dim);
+  cursor: pointer;
+  user-select: none;
+}
+.home-autoplay:hover { color: var(--accent); }
+
+.home-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-decoration: none;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  box-shadow: var(--shadow);
+  transition: border-color .15s, transform .15s;
+  min-width: 0;
+}
+.home-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+
+.home-card-title {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.home-card-url {
+  font-size: 11px;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.home-card-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.home-card-tag {
+  background: var(--tag-bg);
+  color: var(--accent);
+  border-radius: 8px;
+  padding: 1px 8px;
+  font-size: 11px;
+}
+
+.home-empty {
+  text-align: center;
+  color: var(--text-dim);
+  padding: 80px 20px;
+  line-height: 1.9;
+}
+/* 空状态里的 <a> 也走 .home-btn 观感 */
+.home-empty .home-btn { margin-top: 16px; }

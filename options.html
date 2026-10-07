@@ -28,7 +28,7 @@
           <div class="search-bar">
             <input type="text" id="bmSearchInput" data-i18n-placeholder="options.bm_search_placeholder" autocomplete="off">
             <button id="bmTagPanelToggle" class="bm-tp-toggle" data-i18n-title="options.bm_tag_filter">🏷️</button>
-            <button id="bmLayoutToggle" class="bm-tp-toggle" title="Toggle layout">📋</button>
+            <button id="bmLayoutToggle" class="bm-tp-toggle" data-i18n-title="options.bm_toggle_layout" title="Toggle layout">📋</button>
             <div class="filter-group">
               <label data-i18n="options.bm_favorite_gte"></label>
               <div class="star-filter" id="bmStarFilter">
@@ -50,6 +50,8 @@
               </label>
             </div>
           </div>
+          <!-- 快捷标签行（标签勾选「快捷」后显示），位于搜索框下方 -->
+          <div id="bmQuickTags" class="quick-tags" style="display:none;"></div>
           <div id="bmTileSizeControl" class="bm-tile-size-control" style="display:none;">
             <label data-i18n="options.bm_tile_size">Tile Size</label>
             <input type="range" id="bmTileSizeSlider" min="200" max="500" value="320" step="10">
@@ -115,6 +117,18 @@
             </div>
             <p class="sync-hint" data-i18n="options.config_theme_hint"></p>
           </div>
+        </div>
+        <div class="config-section">
+          <h3 data-i18n="options.config_home_title">Home Page</h3>
+          <p class="sync-hint" style="margin-bottom:8px;" data-i18n="options.config_home_hint"></p>
+          <div class="config-row">
+            <button id="openHomeBtn" class="btn-secondary" data-i18n="options.config_home_open"></button>
+          </div>
+          <div class="config-row" style="margin-top:10px;">
+            <input type="text" id="homeUrl" readonly>
+            <button id="copyHomeUrlBtn" class="btn-secondary" data-i18n="options.config_home_copy"></button>
+          </div>
+          <p class="sync-hint" data-i18n="options.config_home_startup_hint"></p>
         </div>
         <div class="config-section">
           <h3 data-i18n="options.config_data">Data Management</h3>
@@ -183,6 +197,9 @@
             <li data-i18n-html="options.guide_tag_li2"><strong>Create a tag:</strong> Click "+" at the bottom of any group, type the tag name and press Enter. Tags can also be drag-reordered within their group.</li>
             <li data-i18n-html="options.guide_tag_li3"><strong>Tag aliases:</strong> Click a tag to edit it. In the "Aliases" field, add alternative names. Searching an alias matches the same tag. Example: tag "JavaScript" with alias "JS" — searching "JS" finds all bookmarks tagged "JavaScript".</li>
             <li data-i18n-html="options.guide_tag_li4"><strong>Marked Tags:</strong> In the tag edit panel, "Marked Tags" lets you associate one tag with others. When searching for tag A, bookmarks tagged with any of its marked tags will also appear. This creates a hierarchical relationship (e.g., "Frontend" marked with "React", "Vue" — searching "Frontend" also finds "React"/"Vue" bookmarks).</li>
+            <li data-i18n-html="options.guide_tag_li5"><strong>Jump link:</strong> Click "Edit" on a tag row and enter a URL. A 🔗 appears in that row (and on the tag's chips in the popup) — click it to open the link directly. Only http(s) / ftp links are accepted. Handy for turning a tag into a shortcut to a site or dashboard.</li>
+            <li data-i18n-html="options.guide_tag_li6"><strong>Quick tag:</strong> Tick "⚡ Quick tag" in the tag's Edit dialog and it appears as a chip under the search box, in both the popup and the Options bookmarks page. One click searches that tag; clicking it again clears the filter. The keyword, rating and sort you already set are left alone.</li>
+            <li data-i18n-html="options.guide_tag_li7"><strong>Home page:</strong> Tick "🏠 Show on home page" and the tag's bookmarks are randomly sampled onto your new tab page. Each new tab draws a fresh sample, and "Shuffle" re-samples. Only tags you tick here feed the home page.</li>
           </ul>
           <div class="guide-note" data-i18n="options.guide_tag_note">Tip: You can add tags directly from the popup when bookmarking a page, or from the Options search page using the tag picker (🏷️ button).</div>
         </div>
